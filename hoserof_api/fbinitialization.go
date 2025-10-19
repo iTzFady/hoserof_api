@@ -1,69 +1,62 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go"
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/api/option"
 )
+var studentsInFirestore=client.Collection("students")
 func CheckPasswordHash(password, hash string) bool {
     err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
     return err == nil
 }
-
-func FirebaseInitialization()(*firestore.Client,context.Context){
-	fmt.Println("initializing firebase")
-	ctx := context.Background()
-	sa := option.WithCredentialsFile("C:\\hoserof_api\\hoserof_api\\hoserof_fb_json.json")
-	app, err := firebase.NewApp(ctx, nil, sa)
-	if err != nil {
-  		log.Fatalln(err)
-	}
-	client, err := app.Firestore(ctx)
-	if err != nil {
-  		log.Fatalln(err)
-	}
-	return client,ctx
+func loadStudentDocument(s string)*firestore.DocumentRef{
+	return studentsInFirestore.Doc(s)
 }
-func studentLoginToFirestore(user User)(string,error){
+func studentLoginToFirestore(user User)(string,*UserData,error){
 	fmt.Println("function called")
-	client,ctx:=FirebaseInitialization()
-	defer client.Close()
-	studentsInFirestore:=client.Collection("students")
-	studentDocument:=studentsInFirestore.Doc(user.StudentId)
-	
+	studentDocument:=loadStudentDocument(user.StudentId)
 	if studentDocument==nil{
 		fmt.Println("user not found")
-		return "",errors.New("user not found")
+		return "",nil,errors.New("user not found")
 	}
 	studentDocumentAsMap,err:=studentDocument.Get(ctx)
 	if err!=nil{
 		fmt.Println("failed to map user")
-		return "",errors.New("failed to map user")
+		return "",nil,errors.New("failed to map user")
 	}
 	var userInFirestore UserInFirestore
 	if err:=studentDocumentAsMap.DataTo(&userInFirestore);err!=nil{
 		fmt.Println("failed to assign user to struct")
-		return "",errors.New("failed to assign user to struct")
+		return "",nil,errors.New("failed to assign user to struct")
 	}
 	var (studentToken string; 
-		err1 error;)
+		err1 error;
+		userData UserData;)
 		fmt.Println(user.StudentPassword,userInFirestore.FirestoreStudentPassword)
 	if user.StudentId==userInFirestore.FirestoreStudentId&&CheckPasswordHash(user.StudentPassword,userInFirestore.FirestoreStudentPassword){
+		userData=mapUserDataToResponse(userInFirestore)
 		fmt.Println("user verified")
-		studentToken,err1=jwtGenerator(user.StudentId)
+		studentToken,err1=jwtGenerator(user.StudentId,userData.StudentClass,userData.StudentName)
 		if err1!=nil{
 			fmt.Println("failed to return token")
-			return "",errors.New("failed to return token")
+			return "",nil,errors.New("failed to return token")
 		}
 	} else{
 		fmt.Println("user access denied. invalid id/password")
 	}
 	fmt.Println("successfully performed operations")
-	return studentToken,nil
+	
+	return studentToken,&userData,nil
+}
+func mapUserDataToResponse(f UserInFirestore) UserData{
+	return UserData{
+		StudentId:f.FirestoreStudentId,
+		StudentName: f.FirestoreStudentName,
+		StudentClass: f.FirestoreStudentClass,
+	
+	}
+
 }

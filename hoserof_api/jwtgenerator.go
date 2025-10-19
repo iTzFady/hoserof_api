@@ -9,8 +9,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 )
-
-func jwtGenerator(id string)(string,error){
+var key = []byte(os.Getenv("JWT_KEY"))
+func jwtGenerator(id string,class string,name string)(string,error){
 	fmt.Println("generating jwt")
 	err := godotenv.Load()
 	if err != nil {
@@ -20,15 +20,16 @@ func jwtGenerator(id string)(string,error){
 
 	// Access environment variables
 	var (
-  key []byte
   t   *jwt.Token
   s   string
 	)
 
-	key = []byte(os.Getenv("JWT_KEY"))
+	
 	t = jwt.NewWithClaims(jwt.SigningMethodHS256, 
   	jwt.MapClaims{ 
     	"user_ID":id,
+		"user_class":class,
+		"user_name":name,
   })
 s ,err= t.SignedString(key)
 if err!=nil{
