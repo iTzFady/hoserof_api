@@ -182,5 +182,9 @@ func ListReleasedResults(c *gin.Context) {
 		return
 	}
 
+	if results == nil {
+		results = []models.ResultSummary{}
+	}
+
 	c.JSON(http.StatusOK, results)
 }

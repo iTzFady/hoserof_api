@@ -310,28 +310,138 @@ func ReleaseResults(examID string) error {
 
 	return nil
 }
-func GetReleasedResult(examID, studentID string) (*models.Submission, error) {
+func GetReleasedResult(examID, studentID string) (*models.ResultDetail, error) {
 	ctx := context.Background()
 	client := config.DB
 
-	doc := client.Collection("exams").Doc(examID).Collection("submissions").Doc(studentID)
-	snap, err := doc.Get(ctx)
+	examDoc := client.Collection("exams").Doc(examID)
+	examSnap, err := examDoc.Get(ctx)
 	if err != nil {
+		return nil, fmt.Errorf("exam not found: %w", err)
+	}
+	var exam models.Exam
+	if err := examSnap.DataTo(&exam); err != nil {
 		return nil, err
 	}
 
+	if !exam.Released {
+		return nil, errors.New("results not released yet")
+	}
+
+	subDoc := examDoc.Collection("submissions").Doc(studentID)
+	subSnap, err := subDoc.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("submission not found: %w", err)
+	}
 	var sub models.Submission
-	if err := snap.DataTo(&sub); err != nil {
+	if err := subSnap.DataTo(&sub); err != nil {
 		return nil, err
 	}
 
 	if !sub.Released {
-		return nil, errors.New("results not released yet")
+		return nil, errors.New("student result not released yet")
 	}
 
-	return &sub, nil
+	qIter := examDoc.Collection("questions").Documents(ctx)
+	questions := make(map[string]models.Question)
+	var totalPoints float64
+	for {
+		doc, err := qIter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		var q models.Question
+		if err := doc.DataTo(&q); err != nil {
+			continue
+		}
+		questions[q.QID] = q
+		totalPoints += q.Points
+	}
+
+	reviews := make([]models.QuestionReview, 0, len(questions))
+	correctCount := 0
+	wrongCount := 0
+
+	for qid, q := range questions {
+		ans, ok := sub.Answers[qid]
+		var studentResp string
+		var awarded float64
+		if ok {
+			studentResp = ans.Response
+			awarded = ans.AutoScore + ans.ManualScore
+		} else {
+			studentResp = ""
+			awarded = 0
+		}
+
+		isCorrect := false
+		switch q.Type {
+		case models.MCQ, models.TF:
+			stud := strings.TrimSpace(strings.ToLower(studentResp))
+			corr := strings.TrimSpace(strings.ToLower(fmt.Sprint(q.CorrectAnswer)))
+			if stud != "" && stud == corr {
+				isCorrect = true
+			}
+		default:
+			if awarded >= q.Points {
+				isCorrect = true
+			}
+		}
+
+		if isCorrect {
+			correctCount++
+		} else {
+			wrongCount++
+		}
+
+		var correctAnsForReturn string
+		if !isCorrect {
+			correctAnsForReturn = q.CorrectAnswer
+		}
+
+		reviews = append(reviews, models.QuestionReview{
+			QID:           q.QID,
+			Type:          string(q.Type),
+			QuestionText:  q.QuestionText,
+			Options:       q.Options,
+			StudentAnswer: studentResp,
+			CorrectAnswer: correctAnsForReturn,
+			IsCorrect:     isCorrect,
+			PointsAwarded: awarded,
+			MaxPoints:     q.Points,
+			ImageURL:      q.ImageURL,
+		})
+	}
+
+	finalScore := sub.AutoScore + sub.ManualScore
+	var percentage float64
+	if totalPoints > 0 {
+		percentage = (finalScore / totalPoints) * 100
+	}
+
+	stats := models.ResultStats{
+		TotalQuestions: len(questions),
+		Correct:        correctCount,
+		Wrong:          wrongCount,
+		TotalPoints:    totalPoints,
+		FinalScore:     finalScore,
+		Percentage:     percentage,
+	}
+
+	result := models.ResultDetail{
+		Exam:       exam,
+		Submission: sub,
+		Reviews:    reviews,
+		Stats:      stats,
+	}
+
+	return &result, nil
 }
-func GetAllReleasedResultsForStudent(studentID string) ([]models.Submission, error) {
+
+func GetAllReleasedResultsForStudent(studentID string) ([]models.ResultSummary, error) {
 	ctx := context.Background()
 	client := config.DB
 
@@ -340,10 +450,16 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.Submission, err
 		return nil, err
 	}
 
-	var results []models.Submission
+	var results []models.ResultSummary
 
 	for _, examDoc := range examsSnap {
 		examID := examDoc.Ref.ID
+
+		// Load exam info
+		var exam models.Exam
+		if err := examDoc.DataTo(&exam); err != nil {
+			continue
+		}
 
 		subSnap, err := client.Collection("exams").
 			Doc(examID).
@@ -360,11 +476,54 @@ func GetAllReleasedResultsForStudent(studentID string) ([]models.Submission, err
 			continue
 		}
 
-		if sub.Released {
-			sub.StudentID = studentID
-			sub.FinalScore = sub.AutoScore + sub.ManualScore
-			results = append(results, sub)
+		if !sub.Released {
+			continue
 		}
+
+		// Calculate stats
+		totalPoints := 0.0
+		correct := 0
+		wrong := 0
+
+		qsSnap, _ := client.Collection("exams").Doc(examID).Collection("questions").Documents(ctx).GetAll()
+		for _, q := range qsSnap {
+			var qq models.Question
+			q.DataTo(&qq)
+
+			totalPoints += qq.Points
+
+			ans, ok := sub.Answers[qq.QID]
+			if !ok {
+				wrong++
+				continue
+			}
+
+			if qq.Type == models.WRITTEN {
+				if ans.AutoScore+ans.ManualScore > 0 {
+					correct++
+				} else {
+					wrong++
+				}
+			} else {
+				if ans.Response == qq.CorrectAnswer {
+					correct++
+				} else {
+					wrong++
+				}
+			}
+		}
+
+		finalScore := sub.AutoScore + sub.ManualScore
+		percentage := (finalScore / totalPoints) * 100.0
+
+		results = append(results, models.ResultSummary{
+			ExamID:      examID,
+			Title:       exam.Title,
+			Date:        exam.StartTime,
+			FinalScore:  finalScore,
+			TotalPoints: totalPoints,
+			Percentage:  percentage,
+		})
 	}
 
 	return results, nil

@@ -50,3 +50,41 @@ type Submission struct {
 	Graded      bool              `json:"graded" firestore:"graded"`
 	Released    bool              `json:"released" firestore:"released"`
 }
+
+type ResultSummary struct {
+	ExamID      string    `json:"exam_id"`
+	Title       string    `json:"title"`
+	Date        time.Time `json:"date"`
+	FinalScore  float64   `json:"final_score"`
+	TotalPoints float64   `json:"total_points"`
+	Percentage  float64   `json:"percentage"`
+}
+
+type QuestionReview struct {
+	QID           string   `json:"qid" firestore:"qid"`
+	Type          string   `json:"type" firestore:"type"`
+	QuestionText  string   `json:"question_text" firestore:"question_text"`
+	Options       []string `json:"options,omitempty" firestore:"options,omitempty"`
+	StudentAnswer string   `json:"student_answer" firestore:"student_answer"`
+	CorrectAnswer string   `json:"correct_answer,omitempty" firestore:"correct_answer,omitempty"`
+	IsCorrect     bool     `json:"is_correct" firestore:"is_correct"`
+	PointsAwarded float64  `json:"points_awarded" firestore:"points_awarded"`
+	MaxPoints     float64  `json:"max_points" firestore:"max_points"`
+	ImageURL      string   `json:"image_url,omitempty" firestore:"image_url,omitempty"`
+}
+
+type ResultStats struct {
+	TotalQuestions int     `json:"total_questions" firestore:"total_questions"`
+	Correct        int     `json:"correct" firestore:"correct"`
+	Wrong          int     `json:"wrong" firestore:"wrong"`
+	TotalPoints    float64 `json:"total_points" firestore:"total_points"`
+	FinalScore     float64 `json:"final_score" firestore:"final_score"`
+	Percentage     float64 `json:"percentage" firestore:"percentage"`
+}
+
+type ResultDetail struct {
+	Exam       Exam             `json:"exam" firestore:"exam"`
+	Submission Submission       `json:"submission" firestore:"submission"`
+	Reviews    []QuestionReview `json:"reviews" firestore:"reviews"`
+	Stats      ResultStats      `json:"stats" firestore:"stats"`
+}
