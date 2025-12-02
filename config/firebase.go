@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/base64"
 	"log"
 	"os"
 
@@ -17,25 +18,29 @@ var opt option.ClientOption
 
 func InitFirebase() {
 	ctx = context.Background()
-	if firebaseCredsJSON := os.Getenv("FIREBASE_CREDENTIALS_JSON"); firebaseCredsJSON != "" {
-		log.Println("Initializing Firebase from environment variable...")
-		opt = option.WithCredentialsJSON([]byte(firebaseCredsJSON))
-	} else {
-		log.Println("Initializing Firebase from credentials file...")
-		opt = option.WithCredentialsFile("./hoserof_fb.json")
+
+	encodedCredentials := os.Getenv("FIREBASE_CREDENTIALS_BASE64")
+	if encodedCredentials == "" {
+		log.Fatal("FIREBASE_CREDENTIALS_BASE64 environment variable not set")
 	}
 
+	jsonBytes, err := base64.StdEncoding.DecodeString(encodedCredentials)
+	if err != nil {
+		log.Fatal("Error decoding FIREBASE_CREDENTIALS_BASE64:", err)
+	}
+
+	opt := option.WithCredentialsJSON(jsonBytes)
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		log.Fatalf("Firebase: Error Occured: %v", err)
+		log.Fatalf("Firebase initialization failed: %v", err)
 	}
 	App = app
 
 	client, err := App.Firestore(ctx)
-
 	if err != nil {
-		log.Fatalf("Firestore: Error Occured: %v", err)
-
+		log.Fatalf("Firestore connection failed: %v", err)
 	}
 	DB = client
+
+	log.Println("Firebase initialized successfully!")
 }
