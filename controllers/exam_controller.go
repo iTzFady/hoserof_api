@@ -1,8 +1,8 @@
 package controllers
 
 import (
-	"HOSEROF_API/models"
-	"HOSEROF_API/services"
+	"github.com/iTzFady/HOSEROF_API/models"
+	"github.com/iTzFady/HOSEROF_API/services"
 	"fmt"
 	"log"
 	"net/http"
