@@ -1,8 +1,8 @@
 package routes
 
 import (
-	"HOSEROF_API/controllers"
-	"HOSEROF_API/middleware"
+	"github.com/iTzFady/HOSEROF_API/controllers"
+	"github.com/iTzFady/HOSEROF_API/middleware"
 
 	"github.com/gin-contrib/cors"
 
