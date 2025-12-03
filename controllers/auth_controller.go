@@ -3,8 +3,8 @@ package controllers
 import (
 	"net/http"
 
-	"HOSEROF_API/models"
-	"HOSEROF_API/services"
+	"github.com/iTzFady/HOSEROF_API/models"
+	"github.com/iTzFady/HOSEROF_API/services"
 
 	"github.com/gin-gonic/gin"
 )
