@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"HOSEROF_API/services"
+	"github.com/iTzFady/HOSEROF_API/services"
 	"log"
 	"net/http"
 
